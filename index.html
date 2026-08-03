@@ -352,10 +352,10 @@
             margin-top: 0.5rem;
         }
 
-        .scan-status {
-            color: #7a8db0;
-            font-size: 0.8rem;
-            padding: 0.3rem 0;
+        .admin-hint code {
+            background: rgba(0,0,0,0.3);
+            padding: 0.1rem 0.5rem;
+            border-radius: 4px;
         }
 
         .track-grid {
@@ -548,14 +548,14 @@
     <div class="admin-panel" id="adminPanel">
         <div class="admin-title">🛠️ АДМИН-ПАНЕЛЬ</div>
         <div class="admin-actions-row">
-            <input type="text" id="newTrackName" placeholder="Название трека (например: 1.mp3)">
-            <button id="scanTracksBtn" class="admin-btn">🔄 Сканировать папку music</button>
+            <input type="text" id="newTrackName" placeholder="Название (например: Мой трек)">
+            <input type="text" id="newTrackFile" placeholder="Имя файла (например: 1.mp3)">
+            <button id="addTrackBtn" class="admin-btn">➕ Добавить трек</button>
         </div>
         <div class="admin-hint">
-            💡 Положи файлы 1.mp3, 2.mp3, ... 100.mp3 в папку <strong>music</strong> на сервере.
-            Нажми «Сканировать» чтобы обновить список.
+            💡 Добавьте файлы в папку <code>music/</code> на GitHub, затем укажите имя файла в поле выше.
+            Пример: файл <code>1.mp3</code> → название <code>Мой трек</code>
         </div>
-        <div class="scan-status" id="scanStatus"></div>
     </div>
 
     <div id="trackListContainer" class="track-grid"></div>
@@ -569,14 +569,28 @@
 
 <script>
     // ============================================================
-    //  ОСНОВНАЯ ЛОГИКА — сканирование папки music/
+    //  СПИСОК ТРЕКОВ — ДОБАВЛЯЙТЕ СВОИ ФАЙЛЫ ЗДЕСЬ!
     // ============================================================
-    
-    let tracksLibrary = [];
+    //  👇 Просто перечисляйте ваши MP3 файлы из папки music/
+    //  Формат: { name: "Название для отображения", file: "имя_файла.mp3" }
+    // ============================================================
+    let tracksLibrary = [
+        { name: "Трек 1", file: "1.mp3" },
+        { name: "Трек 2", file: "2.mp3" },
+        { name: "Трек 3", file: "3.mp3" },
+        { name: "Трек 4", file: "4.mp3" },
+        { name: "Трек 5", file: "5.mp3" },
+        // Добавляйте свои треки здесь!
+        // { name: "Мой любимый трек", file: "мой_трек.mp3" },
+        // { name: "Ещё один трек", file: "ещё_один.mp3" },
+    ];
+
+    // ============================================================
+    //  ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+    // ============================================================
     let currentUserRole = "user";
     let activeTrackIndex = -1;
     let searchQuery = "";
-    let isScanning = false;
 
     // DOM
     const loginOverlay = document.getElementById('loginOverlay');
@@ -588,7 +602,6 @@
     const playerArea = document.getElementById('playerArea');
     const trackCounter = document.getElementById('trackCounter');
     const searchInput = document.getElementById('searchInput');
-    const scanStatus = document.getElementById('scanStatus');
 
     const userLoginBtn = document.getElementById('userLoginBtn');
     const showAdminLoginBtn = document.getElementById('showAdminLoginBtn');
@@ -598,70 +611,21 @@
     const adminSubmitBtn = document.getElementById('adminSubmitBtn');
     const loginError = document.getElementById('loginError');
 
-    const scanTracksBtn = document.getElementById('scanTracksBtn');
+    const addTrackBtn = document.getElementById('addTrackBtn');
     const newTrackName = document.getElementById('newTrackName');
+    const newTrackFile = document.getElementById('newTrackFile');
 
     // ============================================================
-    //  СКАНИРОВАНИЕ ПАПКИ MUSIC/
-    // ============================================================
-
-    async function scanMusicFolder() {
-        if (isScanning) return;
-        isScanning = true;
-        scanStatus.textContent = '⏳ Сканирование...';
-        scanStatus.style.color = '#ffd966';
-
-        const foundTracks = [];
-
-        // Проверяем файлы с 1 до 100
-        for (let i = 1; i <= 100; i++) {
-            const fileName = `${i}.mp3`;
-            const url = `music/${fileName}`;
-            
-            try {
-                const response = await fetch(url, { method: 'HEAD' });
-                if (response.ok) {
-                    foundTracks.push({
-                        name: fileName,
-                        url: url,
-                        index: i
-                    });
-                }
-            } catch (e) {
-                // файл не существует — пропускаем
-            }
-            
-            // Обновляем статус каждые 10 файлов
-            if (i % 10 === 0) {
-                scanStatus.textContent = `⏳ Сканирование... ${i}/100 (найдено: ${foundTracks.length})`;
-            }
-        }
-
-        tracksLibrary = foundTracks;
-        isScanning = false;
-
-        if (tracksLibrary.length === 0) {
-            scanStatus.textContent = '❌ Файлы не найдены. Положите 1.mp3, 2.mp3... в папку music/';
-            scanStatus.style.color = '#ff8a7a';
-        } else {
-            scanStatus.textContent = `✅ Найдено треков: ${tracksLibrary.length}`;
-            scanStatus.style.color = '#2ed573';
-        }
-
-        renderTrackList();
-        updateCounter();
-    }
-
-    // ============================================================
-    //  ФУНКЦИИ ОТРИСОВКИ
+    //  ФУНКЦИИ
     // ============================================================
 
     function showPlayer(index) {
         if (!tracksLibrary[index]) return;
         const track = tracksLibrary[index];
+        const url = `music/${track.file}`;
         playerArea.innerHTML = `
             <audio controls autoplay>
-                <source src="${track.url}" type="audio/mpeg">
+                <source src="${url}" type="audio/mpeg">
                 Ваш браузер не поддерживает аудио
             </audio>
         `;
@@ -675,14 +639,14 @@
     function renderTrackList() {
         const query = searchQuery.toLowerCase().trim();
         const filtered = tracksLibrary.filter((t) => {
-            return t.name.toLowerCase().includes(query);
+            return t.name.toLowerCase().includes(query) || t.file.toLowerCase().includes(query);
         });
 
         trackListContainer.innerHTML = '';
 
         if (filtered.length === 0) {
             if (tracksLibrary.length === 0) {
-                trackListContainer.innerHTML = `<div class="no-results">📂 Нет треков. Добавьте файлы в папку music/</div>`;
+                trackListContainer.innerHTML = `<div class="no-results">📂 Нет треков. Добавьте их в список в коде.</div>`;
             } else {
                 trackListContainer.innerHTML = `<div class="no-results">🔍 ничего не найдено</div>`;
             }
@@ -695,9 +659,7 @@
             div.className = 'track-item';
 
             const btn = document.createElement('button');
-            // Показываем красивое имя: убираем .mp3 и добавляем номер
-            const displayName = track.name.replace('.mp3', '');
-            btn.textContent = `🎵 ${displayName}`;
+            btn.textContent = `🎵 ${track.name}`;
             btn.className = 'track-btn';
             if (activeTrackIndex === origIdx) btn.classList.add('active');
             btn.addEventListener('click', () => {
@@ -708,7 +670,6 @@
 
             div.appendChild(btn);
 
-            // Админские кнопки
             if (currentUserRole === 'admin') {
                 const actions = document.createElement('div');
                 actions.className = 'admin-actions';
@@ -716,16 +677,12 @@
                 const editBtn = document.createElement('button');
                 editBtn.textContent = '✏️';
                 editBtn.className = 'icon-btn edit-btn';
-                editBtn.title = 'Переименовать';
+                editBtn.title = 'Редактировать';
                 editBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    const newName = prompt('Новое название (например: 5.mp3):', track.name);
+                    const newName = prompt('Новое название:', track.name);
                     if (newName && newName.trim()) {
-                        // В реальном проекте нужно переименовать файл на сервере
-                        // Пока просто меняем в списке
                         track.name = newName.trim();
-                        // Обновляем URL если изменилось имя
-                        track.url = `music/${newName.trim()}`;
                         renderTrackList();
                     }
                 });
@@ -733,16 +690,16 @@
                 const delBtn = document.createElement('button');
                 delBtn.textContent = '🗑️';
                 delBtn.className = 'icon-btn delete-btn';
-                delBtn.title = 'Удалить (только из списка)';
+                delBtn.title = 'Удалить';
                 delBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    if (confirm(`Удалить "${track.name}" из списка? (файл останется на сервере)`)) {
+                    if (confirm(`Удалить "${track.name}"?`)) {
                         const idx = tracksLibrary.indexOf(track);
                         if (idx > -1) {
                             tracksLibrary.splice(idx, 1);
                             if (activeTrackIndex === idx) {
                                 activeTrackIndex = -1;
-                                playerArea.innerHTML = `<span class="placeholder-text">🎵 трек удалён из списка</span>`;
+                                playerArea.innerHTML = `<span class="placeholder-text">🎵 трек удалён</span>`;
                             } else if (activeTrackIndex > idx) {
                                 activeTrackIndex--;
                             }
@@ -765,6 +722,28 @@
         trackCounter.textContent = `🎵 всего треков: ${tracksLibrary.length}`;
     }
 
+    function addTrack() {
+        const name = newTrackName.value.trim();
+        const file = newTrackFile.value.trim();
+
+        if (!name || !file) {
+            alert('Заполните название и имя файла');
+            return;
+        }
+
+        // Проверяем, не существует ли уже такой файл
+        if (tracksLibrary.some(t => t.file === file)) {
+            alert('Файл с таким именем уже есть в списке');
+            return;
+        }
+
+        tracksLibrary.push({ name, file });
+        newTrackName.value = '';
+        newTrackFile.value = '';
+        renderTrackList();
+        updateCounter();
+    }
+
     // ============================================================
     //  АВТОРИЗАЦИЯ
     // ============================================================
@@ -776,8 +755,6 @@
         musicApp.classList.add('visible');
         renderTrackList();
         updateCounter();
-        // При входе сканируем папку
-        scanMusicFolder();
     }
 
     function loginAsAdmin() {
@@ -792,7 +769,6 @@
             loginError.style.display = 'none';
             renderTrackList();
             updateCounter();
-            scanMusicFolder();
         } else {
             loginError.style.display = 'block';
             setTimeout(() => { loginError.style.display = 'none'; }, 2000);
@@ -848,7 +824,10 @@
         renderTrackList();
     });
 
-    scanTracksBtn.addEventListener('click', scanMusicFolder);
+    addTrackBtn.addEventListener('click', addTrack);
+
+    newTrackName.addEventListener('keypress', (e) => { if (e.key === 'Enter') addTrack(); });
+    newTrackFile.addEventListener('keypress', (e) => { if (e.key === 'Enter') addTrack(); });
 
     // ============================================================
     //  ИНИЦИАЛИЗАЦИЯ
@@ -857,7 +836,7 @@
     renderTrackList();
     updateCounter();
 
-    // Добавляем стили для audio
+    // Стили для audio
     const styleEl = document.createElement('style');
     styleEl.textContent = `
         audio {
